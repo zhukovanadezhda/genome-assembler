@@ -13,35 +13,6 @@
 
 """Perform assembly based on debruijn graph."""
 
-import argparse
-import os
-import sys
-from pathlib import Path
-from networkx import (
-    DiGraph,
-    all_simple_paths,
-    lowest_common_ancestor,
-    has_path,
-    random_layout,
-    draw,
-    spring_layout,
-    isolates,
-    shortest_path
-)
-import matplotlib
-from operator import itemgetter
-import random
-
-random.seed(9001)
-import itertools
-from random import randint
-import statistics
-import textwrap
-import matplotlib.pyplot as plt
-from typing import Iterator, Dict, List
-
-matplotlib.use("Agg")
-
 __author__ = "Nadezhda Zhukova"
 __copyright__ = "Université Paris Cité"
 __credits__ = ["Nadezhda Zhukova"]
@@ -52,13 +23,33 @@ __email__ = "nadiajuckova@gmail.com"
 __status__ = "Developpement"
 
 
+import argparse
+import itertools
+import os
+from pathlib import Path
+import random
+import statistics
+import sys
+import textwrap
+from typing import Iterator, Dict, List
+from networkx import (
+    DiGraph,
+    all_simple_paths,
+    lowest_common_ancestor,
+    has_path,
+    isolates
+)
+
+random.seed(9001)
+
+
 def isfile(path: str) -> Path:  # pragma: no cover
     """Check if path is an existing file.
-
+    
     :param path: (str) Path to the file
-
+    
     :raises ArgumentTypeError: If file does not exist
-
+    
     :return: (Path) Path object of the input file
     """
     myfile = Path(path)
@@ -78,19 +69,20 @@ def get_arguments():  # pragma: no cover
     """
     # Parsing arguments
     parser = argparse.ArgumentParser(
-        description=__doc__, usage="{0} -h".format(sys.argv[0])
+        description=__doc__, usage=f"{sys.argv[0]} -h"
     )
     parser.add_argument(
         "-i", 
-        dest="fastq_file", 
-        type=isfile, 
-        required=True, 
+        dest="fastq_file",
+        type=isfile,
+        required=True,
         help="Fastq file"
     )
     parser.add_argument(
-        "-k", dest="kmer_size", 
-        type=int, 
-        default=22, 
+        "-k",
+        dest="kmer_size",
+        type=int,
+        default=22,
         help="k-mer size (default 22)"
     )
     parser.add_argument(
@@ -101,9 +93,9 @@ def get_arguments():  # pragma: no cover
         help="Output contigs in fasta file (default contigs.fasta)",
     )
     parser.add_argument(
-        "-f", 
-        dest="graphimg_file", 
-        type=Path, 
+        "-f",
+        dest="graphimg_file",
+        type=Path,
         help="Save graph as an image (png)"
     )
     return parser.parse_args()
@@ -116,11 +108,15 @@ def read_fastq(fastq_file: Path) -> Iterator[str]:
     :return: A generator object that iterates over the read sequences.
     """
     with fastq_file.open('r') as file:
-        for header in file:
-            sequence = next(file).strip()  # Read sequence
-            next(file)  # Skip plus line
-            next(file)  # Skip quality line
-            yield sequence
+        while True:
+            try:
+                next(file)                     # Read header
+                sequence = next(file).strip()  # Read sequence
+                next(file)                     # Skip plus line
+                next(file)                     # Skip quality line
+                yield sequence
+            except StopIteration:
+                break
 
 
 def cut_kmer(read: str, kmer_size: int) -> Iterator[str]:
@@ -163,8 +159,7 @@ def build_graph(kmer_dict: Dict[str, int]) -> DiGraph:
 
 def remove_paths(graph: DiGraph, path_list: List[List[str]],
                  delete_entry_node: bool, delete_sink_node: bool) -> DiGraph:
-    """Remove a list of path in a graph. A path is set of connected nodes in
-    the graph.
+    """Remove a list of path in a graph.
 
     :param graph: (nx.DiGraph) A directed graph object
     :param path_list: (list) A list of paths
@@ -174,14 +169,17 @@ def remove_paths(graph: DiGraph, path_list: List[List[str]],
     """
     for path in path_list:
         for i in range(len(path) - 1):
-            if delete_entry_node and i == 0:
+            # Check if the node exists before trying to remove it
+            if delete_entry_node and i == 0 and path[i] in graph:
                 graph.remove_node(path[i])
-            elif delete_sink_node and i == len(path) - 2:
-                graph.remove_node(path[i + 1])
+            elif delete_sink_node and i == len(path) - 2 and path[i+1] in graph:
+                graph.remove_node(path[i+1])
             else:
-                graph.remove_edge(path[i], path[i + 1])
+                # Check if the edge exists and remove it
+                if graph.has_edge(path[i], path[i+1]):
+                    graph.remove_edge(path[i], path[i+1])
 
-    # Remove isolated nodes
+    # Remove isolated nodes after edge removals
     isolated_nodes = list(isolates(graph))
     graph.remove_nodes_from(isolated_nodes)
 
@@ -211,14 +209,14 @@ def select_best_path(graph: DiGraph, path_list: List[List[str]],
         best_path_index = path_length.index(max(path_length))
     else:
         # If both weights and lengths are equal, choose randomly
-        best_path_index = randint(0, len(path_list) - 1)
+        best_path_index = random.randint(0, len(path_list) - 1)
 
     # Remove non-best paths
-    paths_to_remove = [path for i, path in enumerate(path_list) 
+    paths_to_remove = [path for i, path in enumerate(path_list)
                        if i != best_path_index]
-    
-    graph = remove_paths(graph, paths_to_remove, 
-                         delete_entry_node, 
+
+    graph = remove_paths(graph, paths_to_remove,
+                         delete_entry_node,
                          delete_sink_node)
 
     return graph
@@ -236,8 +234,8 @@ def path_average_weight(graph: DiGraph, path: List[str]) -> float:
     )
 
 
-def solve_bubble(graph: DiGraph, 
-                 ancestor_node: str, 
+def solve_bubble(graph: DiGraph,
+                 ancestor_node: str,
                  descendant_node: str) -> DiGraph:
     """Explore and solve bubble issue by selecting the best path.
 
@@ -247,8 +245,8 @@ def solve_bubble(graph: DiGraph,
     :return: (nx.DiGraph) A directed graph object
     """
     # Find all simple paths between the ancestor and descendant
-    all_paths = list(all_simple_paths(graph, 
-                                      source=ancestor_node, 
+    all_paths = list(all_simple_paths(graph,
+                                      source=ancestor_node,
                                       target=descendant_node))
     # Compute the average weight of the path
     weight_avgs = [path_average_weight(graph, path) for path in all_paths]
@@ -256,7 +254,7 @@ def solve_bubble(graph: DiGraph,
     path_lengths = [len(path) for path in all_paths]
     # Choose the best path and remove others
     graph = select_best_path(graph, all_paths, path_lengths, weight_avgs)
-    
+
     return graph
 
 
@@ -266,13 +264,13 @@ def simplify_bubbles(graph: DiGraph) -> DiGraph:
     :param graph: (nx.DiGraph) A directed graph object
     :return: (nx.DiGraph) A directed graph object
     """
-    bubble = False 
-    
+    bubble = False
+
     # Iterate through each node to check for bubbles
     for node in graph.nodes():
         # Get the list of predecessors for the current node
         liste_predecesseurs = list(graph.predecessors(node))
-        
+
         # If there is more than one predecessor, a potential bubble exists
         if len(liste_predecesseurs) > 1:
             # Check each unique combination of predecessors (i, j)
@@ -285,33 +283,90 @@ def simplify_bubbles(graph: DiGraph) -> DiGraph:
                     break
             if bubble:
                 break
-    
+
     # Recursive simplification of the graph
     if bubble:
         # Solve the bubble between the ancestor and the current node
         graph = simplify_bubbles(solve_bubble(graph, noeud_ancetre, node))
-    
+
     return graph
 
 
 def solve_entry_tips(graph: DiGraph, starting_nodes: List[str]) -> DiGraph:
-    """Remove entry tips
+    """Remove entry tips from the graph.
 
-    :param graph: (nx.DiGraph) A directed graph object
-    :param starting_nodes: (list) A list of starting nodes
-    :return: (nx.DiGraph) A directed graph object
+    :param graph: (nx.DiGraph) A directed graph object.
+    :param starting_nodes: (list) A list of starting nodes.
+    :return: (nx.DiGraph) A directed graph object without entry tips.
     """
-    pass
+    for node in graph.nodes:
+        predecessors = list(graph.predecessors(node))
+        # If node has multiple predecessors, process entry tips
+        if len(predecessors) > 1:
+            path_list, path_lengths, weight_avg_list = [], [], []
+            for start_node in starting_nodes:
+                if has_path(graph, start_node, node):
+                    # Get all simple paths from start_node to node
+                    for path in all_simple_paths(graph, start_node, node):
+                        if len(path) >= 2:
+                            path_list.append(path)
+                            path_lengths.append(len(path))
+                            weight_avg_list.append(path_average_weight(graph,
+                                                                       path))
+
+            # If multiple valid paths exist, select the best one
+            if len(path_list) > 1:
+                graph = select_best_path(graph, path_list,
+                                         path_lengths,
+                                         weight_avg_list,
+                                         delete_entry_node=True,
+                                         delete_sink_node=False)
+
+                # Recursively remove entry tips
+                return solve_entry_tips(graph, get_starting_nodes(graph))
+
+    return graph
 
 
-def solve_out_tips(graph: DiGraph, ending_nodes: List[str]) -> DiGraph:
-    """Remove out tips
+def solve_out_tips(graph: DiGraph, sink_nodes: List[str]) -> DiGraph:
+    """Remove out tips from the graph.
 
-    :param graph: (nx.DiGraph) A directed graph object
-    :param ending_nodes: (list) A list of ending nodes
-    :return: (nx.DiGraph) A directed graph object
+    :param graph: (nx.DiGraph) A directed graph object.
+    :param sink_nodes: (list) A list of sink nodes.
+    :return: (nx.DiGraph) A directed graph object without out tips.
     """
-    pass
+    while True:
+        tip_found = False
+        for node in graph.nodes:
+            successors = list(graph.successors(node))
+            # If node has multiple successors, process out tips
+            if len(successors) > 1:
+                path_list, path_lengths, weight_avg_list = [], [], []
+                for sink_node in sink_nodes:
+                    if has_path(graph, node, sink_node):
+                        # Get all simple paths from node to sink_node
+                        for path in all_simple_paths(graph, node, sink_node):
+                            if len(path) >= 2:
+                                path_list.append(path)
+                                path_lengths.append(len(path))
+                                weight_avg_list.append(path_average_weight(graph, path))
+
+                # If multiple valid paths exist, select the best one
+                if len(path_list) > 1:
+                    graph = select_best_path(graph,
+                                             path_list,
+                                             path_lengths,
+                                             weight_avg_list,
+                                             delete_entry_node=False,
+                                             delete_sink_node=True)
+                    tip_found = True
+                    break
+
+        if not tip_found:
+            break
+        sink_nodes = get_sink_nodes(graph)
+
+    return graph
 
 
 def get_starting_nodes(graph: DiGraph) -> List[str]:
@@ -319,7 +374,7 @@ def get_starting_nodes(graph: DiGraph) -> List[str]:
     :param graph: (nx.DiGraph) A directed graph object
     :return: (list) A list of all nodes without predecessors
     """
-    return [node for node in graph.nodes() 
+    return [node for node in graph.nodes()
             if not list(graph.predecessors(node))]
 
 
@@ -329,13 +384,13 @@ def get_sink_nodes(graph: DiGraph) -> List[str]:
     :param graph: (nx.DiGraph) A directed graph object
     :return: (list) A list of all nodes without successors
     """
-    return [node for node in graph.nodes() 
+    return [node for node in graph.nodes()
             if not list(graph.successors(node))]
 
 
 def get_contigs(
     graph: DiGraph, starting_nodes: List[str], ending_nodes: List[str]
-) -> List:
+    ) -> List:
     """Extract the contigs from the graph
 
     :param graph: (nx.DiGraph) A directed graph object
@@ -344,7 +399,7 @@ def get_contigs(
     :return: (list) List of [contiguous sequence and their length]
     """
     contigs = []
-    
+
     for start_node in starting_nodes:
         for end_node in ending_nodes:
             # Get all simple paths from the start node to the end node
@@ -355,10 +410,10 @@ def get_contigs(
                 contig = path[0]
                 for node in path[1:]:
                     # Append only the last nucleotide of each subsequent k-mer
-                    contig += node[-1]  
+                    contig += node[-1]
                 # Store contig and its length
-                contigs.append((contig, len(contig)))  
-    
+                contigs.append((contig, len(contig)))
+
     return contigs
 
 
@@ -374,33 +429,6 @@ def save_contigs(contigs_list: List[str], output_file: Path) -> None:
             file.write(textwrap.fill(contig, 80) + "\n")
 
 
-def draw_graph(graph: DiGraph, graphimg_file: Path) -> None: # pragma: no cover
-    """Draw the graph
-
-    :param graph: (nx.DiGraph) A directed graph object
-    :param graphimg_file: (Path) Path to the output file
-    """
-    fig, ax = plt.subplots()
-    elarge = [(u, v) for (u, v, d) 
-              in graph.edges(data=True) if d["weight"] > 3]
-    # print(elarge)
-    esmall = [(u, v) for (u, v, d) 
-              in graph.edges(data=True) if d["weight"] <= 3]
-    # print(elarge)
-    # Draw the graph with networkx
-    # pos=nx.spring_layout(graph)
-    pos = nx.random_layout(graph)
-    nx.draw_networkx_nodes(graph, pos, node_size=6)
-    nx.draw_networkx_edges(graph, pos, edgelist=elarge, width=6)
-    nx.draw_networkx_edges(
-        graph, pos, edgelist=esmall, width=6, alpha=0.5, 
-        edge_color="b", style="dashed"
-    )
-    # nx.draw_networkx(graph, pos, node_size=10, with_labels=False)
-    # save image
-    plt.savefig(graphimg_file.resolve())
-
-
 # ==============================================================
 # Main program
 # ==============================================================
@@ -411,12 +439,34 @@ def main() -> None:  # pragma: no cover
     # Get arguments
     args = get_arguments()
 
-    # Fonctions de dessin du graphe
-    # A decommenter si vous souhaitez visualiser un petit
-    # graphe
-    # Plot the graph
-    # if args.graphimg_file:
-    #     draw_graph(graph, args.graphimg_file)
+    fasta_file = args.fastq_file
+    kmer_size = args.kmer_size
+    output_file = args.output_file
+
+    # Build the kmer dictionary
+    kmer_dict = build_kmer_dict(fasta_file, kmer_size)
+
+    # Build the debruijn graph
+    graph = build_graph(kmer_dict)
+
+    # Simplify the graph by removing bubbles
+    graph = simplify_bubbles(graph)
+
+    # Get the starting and ending nodes
+    starting_nodes = get_starting_nodes(graph)
+    ending_nodes = get_sink_nodes(graph)
+
+    # Remove entry tips
+    graph = solve_entry_tips(graph, starting_nodes)
+
+    # Remove out tips
+    graph = solve_out_tips(graph, ending_nodes)
+
+    # Get the contigs
+    contigs = get_contigs(graph, starting_nodes, ending_nodes)
+
+    # Save the contigs in a fasta file
+    save_contigs(contigs, output_file)
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -1,40 +1,56 @@
-# Assembleur basé sur les graphes de Debruijn
-
-Vous trouverez la description complète du TP [ici]( 
-https://docs.google.com/document/d/1P4v3bHbSurD7RXA-ldVwmtNKGvWsnBae51RMGye_KLs/edit?usp=sharing).
+# De Bruijn Graph-Based Assembler
 
 ## Introduction
 
-L’objectif de ce TP sera d’assembler le génome de l’entérovirus A71. Ce génome présente l’intérêt d’être très court: 7408 nucléotides, linéaire et non segmenté.
-Le fichier fastq dont vous disposez a été généré à l’aide du programme ART [Huang 2011] via la commande:
-art_illumina -i eva71.fna -ef -l 100 -f 20 -o eva71 -ir 0 -dr 0 -ir2 0 -dr2 0 -na -qL 41 -rs 1539952693 
-Les lectures ont une qualité maximale (41) et ne présentent pas d’insertion. Seuls les lectures correspondant aux brins 5’ -> 3’ vous sont ici fournies. 
+This repository contains an implementation of a de Bruijn graph-based assembler to assemble the genome of the enterovirus A71. This genome is particularly interesting due to its short length: 7408 nucleotides, linear, and non-segmented.
 
-Dans le dossier debruijn-tp/data/, vous trouverez:
-eva71.fna : génome du virus d’intérêt
-eva71_plus_perfect.fq: lectures 
+The provided fastq file was generated using the ART program [Huang 2011] with the following command:
 
-
-## Installation des dépendances
-
-Vous utiliserez les librairies networkx, pytest et pylint de Python:
-
-```
-pip3 install --user networkx pytest pylint pytest-cov
+```bash
+art_illumina -i eva71.fna -ef -l 100 -f 20 -o eva71 -ir 0 -dr 0 -ir2 0 -dr2 0 -na -qL 41 -rs 1539952693
 ```
 
-## Utilisation
+The reads have maximum quality (41) and contain no insertions. Only the reads corresponding to the 5' -> 3' strands are provided.
 
-Vous créerez un programme Python3 nommé debruijn.py dans le dossier debruijn/.  Il prendra en argument :
- -i fichier fastq single end
- -k taille des kmer (optionnel - default 21)
- -o fichier output avec les contigs
+In the folder `debruijn-tp/data/`, you will find:
+- `eva71.fna`: the genome of the virus of interest
+- `eva71_plus_perfect.fq`: reads
+
+## Dependency Installation
+
+To set up the environment, run the following commands:
+
+```bash
+conda env create -f environment.yml
+conda activate genome-assembler
+```
+
+## Usage
+
+Clone the repository and navigate to the project folder:
+
+```bash
+git clone git@github.com:zhukovanadezhda/genome-assembler.git
+cd genome-assembler
+```
+
+Run the assembler with:
+
+```bash
+python3 debruijn.py \
+-i <input fastq file>  \ # single-end fastq file
+-k <kmer size>         \ # optional, default is 21
+-o <output file>         # file with the contigs
+```
 
 ## Tests
 
-Vous testerez vos fonctions à l’aide de la commande pytest --cov=debruijn à exécuter dans le dossier debruijn-tp/. En raison de cette contrainte, les noms des fonctions ne seront pas libre. Il sera donc impératif de respecter le nom des fonctions “imposées”, de même que leur caractéristique et paramètres. 
-Vous vérifierez également la qualité syntaxique de votre programme en exécutant la commande: pylint debruijn.py
+You can test the program by running:
+
+```bash
+pytest --cov=debruijn
+```
 
 ## Contact
 
-En cas de questions, vous pouvez me contacter par email: amine.ghozlane[at]pasteur.fr
+If you have any questions, feel free to contact me via email: nadiajuckova@gmail.com

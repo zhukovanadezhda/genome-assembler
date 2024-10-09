@@ -1,0 +1,13 @@
+name: genome-assembler
+channels:
+  - nodefaults
+  - conda-forge
+dependencies:
+  - python
+  - networkx 
+  - matplotlib
+  - pytest 
+  - pylint 
+  - pytest-cov
+  - pip
+

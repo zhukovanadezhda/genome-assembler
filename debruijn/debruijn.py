@@ -25,12 +25,15 @@ from networkx import (
     random_layout,
     draw,
     spring_layout,
+    isolates,
+    shortest_path
 )
 import matplotlib
 from operator import itemgetter
 import random
 
 random.seed(9001)
+import itertools
 from random import randint
 import statistics
 import textwrap
@@ -158,43 +161,67 @@ def build_graph(kmer_dict: Dict[str, int]) -> DiGraph:
     return graph
 
 
-def remove_paths(
-    graph: DiGraph,
-    path_list: List[List[str]],
-    delete_entry_node: bool,
-    delete_sink_node: bool,
-) -> DiGraph:
-    """Remove a list of path in a graph. A path is set of connected node in
-    the graph
+def remove_paths(graph: DiGraph, path_list: List[List[str]],
+                 delete_entry_node: bool, delete_sink_node: bool) -> DiGraph:
+    """Remove a list of path in a graph. A path is set of connected nodes in
+    the graph.
 
     :param graph: (nx.DiGraph) A directed graph object
-    :param path_list: (list) A list of path
-    :param delete_entry_node: (boolean) True-> Remove the first node of a path
-    :param delete_sink_node: (boolean) True-> Remove the last node of a path
+    :param path_list: (list) A list of paths
+    :param delete_entry_node: (boolean) True -> Remove the first node of a path
+    :param delete_sink_node: (boolean) True -> Remove the last node of a path
     :return: (nx.DiGraph) A directed graph object
     """
-    pass
+    for path in path_list:
+        for i in range(len(path) - 1):
+            if delete_entry_node and i == 0:
+                graph.remove_node(path[i])
+            elif delete_sink_node and i == len(path) - 2:
+                graph.remove_node(path[i + 1])
+            else:
+                graph.remove_edge(path[i], path[i + 1])
+
+    # Remove isolated nodes
+    isolated_nodes = list(isolates(graph))
+    graph.remove_nodes_from(isolated_nodes)
+
+    return graph
 
 
-def select_best_path(
-    graph: DiGraph,
-    path_list: List[List[str]],
-    path_length: List[int],
-    weight_avg_list: List[float],
-    delete_entry_node: bool = False,
-    delete_sink_node: bool = False,
-) -> DiGraph:
+def select_best_path(graph: DiGraph, path_list: List[List[str]],
+                     path_length: List[int], weight_avg_list: List[float],
+                     delete_entry_node: bool = False,
+                     delete_sink_node: bool = False) -> DiGraph:
     """Select the best path between different paths
 
     :param graph: (nx.DiGraph) A directed graph object
-    :param path_list: (list) A list of path
-    :param path_length_list: (list) A list of length of each path
-    :param weight_avg_list: (list) A list of average weight of each path
-    :param delete_entry_node: (boolean) True-> Remove the first node of a path
-    :param delete_sink_node: (boolean) True-> Remove the last node of a path
+    :param path_list: (list) A list of paths
+    :param path_length: (list) A list of lengths of each path
+    :param weight_avg_list: (list) A list of average weights of each path
+    :param delete_entry_node: (bool) True -> Remove the first node of a path
+    :param delete_sink_node: (bool) True -> Remove the last node of a path
     :return: (nx.DiGraph) A directed graph object
     """
-    pass
+    # Compare based on stdev of the average weight
+    if len(weight_avg_list) > 1 and statistics.stdev(weight_avg_list) > 0:
+        # Select path with the highest average weight
+        best_path_index = weight_avg_list.index(max(weight_avg_list))
+    elif len(path_length) > 1 and statistics.stdev(path_length) > 0:
+        # If weights are equal, compare path lengths
+        best_path_index = path_length.index(max(path_length))
+    else:
+        # If both weights and lengths are equal, choose randomly
+        best_path_index = randint(0, len(path_list) - 1)
+
+    # Remove non-best paths
+    paths_to_remove = [path for i, path in enumerate(path_list) 
+                       if i != best_path_index]
+    
+    graph = remove_paths(graph, paths_to_remove, 
+                         delete_entry_node, 
+                         delete_sink_node)
+
+    return graph
 
 
 def path_average_weight(graph: DiGraph, path: List[str]) -> float:
@@ -212,14 +239,25 @@ def path_average_weight(graph: DiGraph, path: List[str]) -> float:
 def solve_bubble(graph: DiGraph, 
                  ancestor_node: str, 
                  descendant_node: str) -> DiGraph:
-    """Explore and solve bubble issue
+    """Explore and solve bubble issue by selecting the best path.
 
     :param graph: (nx.DiGraph) A directed graph object
     :param ancestor_node: (str) An upstream node in the graph
     :param descendant_node: (str) A downstream node in the graph
     :return: (nx.DiGraph) A directed graph object
     """
-    pass
+    # Find all simple paths between the ancestor and descendant
+    all_paths = list(all_simple_paths(graph, 
+                                      source=ancestor_node, 
+                                      target=descendant_node))
+    # Compute the average weight of the path
+    weight_avgs = [path_average_weight(graph, path) for path in all_paths]
+    # Compute the length of each path
+    path_lengths = [len(path) for path in all_paths]
+    # Choose the best path and remove others
+    graph = select_best_path(graph, all_paths, path_lengths, weight_avgs)
+    
+    return graph
 
 
 def simplify_bubbles(graph: DiGraph) -> DiGraph:
@@ -228,7 +266,32 @@ def simplify_bubbles(graph: DiGraph) -> DiGraph:
     :param graph: (nx.DiGraph) A directed graph object
     :return: (nx.DiGraph) A directed graph object
     """
-    pass
+    bubble = False 
+    
+    # Iterate through each node to check for bubbles
+    for node in graph.nodes():
+        # Get the list of predecessors for the current node
+        liste_predecesseurs = list(graph.predecessors(node))
+        
+        # If there is more than one predecessor, a potential bubble exists
+        if len(liste_predecesseurs) > 1:
+            # Check each unique combination of predecessors (i, j)
+            for i, j in itertools.combinations(liste_predecesseurs, 2):
+                # Find the lowest common ancestor of the two predecessors
+                noeud_ancetre = lowest_common_ancestor(graph, i, j)
+                # If a common ancestor is found, a bubble exists
+                if noeud_ancetre is not None:
+                    bubble = True
+                    break
+            if bubble:
+                break
+    
+    # Recursive simplification of the graph
+    if bubble:
+        # Solve the bubble between the ancestor and the current node
+        graph = simplify_bubbles(solve_bubble(graph, noeud_ancetre, node))
+    
+    return graph
 
 
 def solve_entry_tips(graph: DiGraph, starting_nodes: List[str]) -> DiGraph:
@@ -305,9 +368,9 @@ def save_contigs(contigs_list: List[str], output_file: Path) -> None:
     :param contig_list: (list) List of [contiguous sequence and their length]
     :param output_file: (Path) Path to the output file
     """
-    with output_file.open("w") as file:
+    with output_file.open("w", newline='\n') as file:
         for i, (contig, length) in enumerate(contigs_list):
-            file.write(f">contig_{i} length={length}\n")
+            file.write(f">contig_{i} len={length}\n")
             file.write(textwrap.fill(contig, 80) + "\n")
 
 

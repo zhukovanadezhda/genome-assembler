@@ -51,7 +51,7 @@ You can test the program by running:
 pytest --cov=debruijn
 ```
 
-## Example of Usage:
+## Example of Usage
 
 To assemble the enterovirus A71 genome, you can run the following command:
 

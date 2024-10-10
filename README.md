@@ -1,6 +1,6 @@
-# De Bruijn Graph-Based Assembler
+# 🧬🛠️De Bruijn Graph-Based Assembler
 
-## Introduction
+## 📝Introduction
 
 This repository contains an implementation of a de Bruijn graph-based assembler to assemble the genome of the enterovirus A71. This genome is particularly interesting due to its short length: 7408 nucleotides, linear, and non-segmented.
 
@@ -16,7 +16,7 @@ In the folder `debruijn-tp/data/`, you will find:
 - `eva71.fna`: the genome of the virus of interest
 - `eva71_plus_perfect.fq`: reads
 
-## Dependency Installation
+## 🔄Dependency Installation
 
 To set up the environment, run the following commands:
 
@@ -25,7 +25,7 @@ conda env create -f environment.yml
 conda activate genome-assembler
 ```
 
-## Usage
+## 🧑‍💻️Usage
 
 Clone the repository and navigate to the project folder:
 
@@ -43,7 +43,7 @@ python3 debruijn.py \
 -o <output file>         # file with the contigs
 ```
 
-## Unit Testing
+## ⚙️Testing
 
 You can test the program by running:
 
@@ -51,7 +51,7 @@ You can test the program by running:
 pytest --cov=debruijn
 ```
 
-## Example of Usage
+## 🎁Example of Usage
 
 To assemble the enterovirus A71 genome, you can run the following command:
 
@@ -104,6 +104,6 @@ Sbjct  12    GTGGGTTGTCACCCACCCACAGGGTCCACTGGGCGCTAGTACACTGGTATCTCGGTACCT  71
 
 This output shows a perfect match between the assembled genome and the reference genome, indicating that the assembly was successful.
 
-## Contact
+## ✉️Contact
 
 If you have any questions, feel free to contact me via email: nadiajuckova@gmail.com
